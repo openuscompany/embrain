@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>2027 트렌드모니터 (이북)</title>
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/pdf-reader.css?v=202">
+</head>
+
+<body class="pdf-reader" data-theme="light">
+
+  <div class="pr-wrapper">
+
+    <div class="pr-toolbar" id="pr-toolbar" role="group" aria-label="보기 도구">
+      <button type="button" class="pr-toolbar-btn" id="pr-zoom-out" aria-label="화면 축소">−</button>
+      <span class="pr-toolbar-zoom-level" id="pr-zoom-level">100%</span>
+      <button type="button" class="pr-toolbar-btn" id="pr-zoom-in" aria-label="화면 확대">+</button>
+      <span class="pr-toolbar-divider"></span>
+      <button type="button" class="pr-toolbar-btn" id="pr-bookmark-btn" aria-label="이 페이지 책갈피 표시">🔖</button>
+      <button type="button" class="pr-toolbar-btn" id="pr-memo-btn" aria-label="이 페이지에 메모 남기기">✎</button>
+    </div>
+
+    <div class="pr-bookmark-panel" id="pr-bookmark-panel" hidden>
+      <button type="button" class="pr-panel-toggle" id="pr-bookmark-toggle">🔖 이 페이지 책갈피 추가</button>
+      <div class="pr-panel-list" id="pr-bookmark-list">
+        <p class="pr-panel-empty" id="pr-bookmark-empty">아직 표시한 책갈피가 없어요</p>
+      </div>
+    </div>
+
+    <div class="pr-memo-panel" id="pr-memo-panel" hidden>
+      <textarea class="pr-memo-textarea" id="pr-memo-textarea" placeholder="이 페이지에 메모를 남겨보세요" aria-label="이 페이지 메모"></textarea>
+      <div class="pr-memo-panel__actions">
+        <button type="button" class="pr-memo-close" id="pr-memo-close">저장하고 닫기</button>
+      </div>
+      <p class="pr-panel-subhead" id="pr-memo-listhead" hidden>저장된 메모</p>
+      <div class="pr-panel-list" id="pr-memo-list">
+        <p class="pr-panel-empty" id="pr-memo-empty">아직 남긴 메모가 없어요</p>
+      </div>
+    </div>
+
+    <div class="pr-stage" id="pr-stage">
+      <nav class="pr-index-rail" id="pr-index-rail" aria-label="목차"></nav>
+      <div class="pr-loading" id="pr-loading">
+        <div class="pr-spinner"></div>
+        <p>이북을 준비하고 있어요…</p>
+      </div>
+      <div class="pr-book-crop" id="pr-book-crop">
+        <div class="pr-book" id="pr-book"></div>
+        <div class="pr-bookmark-ribbon" id="pr-bookmark-ribbon" hidden></div>
+      </div>
+    </div>
+
+    <div class="pr-controls">
+      <div class="pr-controls__nav">
+        <button type="button" class="pr-btn pr-btn--sm pr-btn--first" id="pr-first" aria-label="첫 페이지로 이동">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M11 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <button type="button" class="pr-btn pr-btn--prev" id="pr-prev" aria-label="이전 페이지">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+
+        <div class="pr-indicator" id="pr-indicator" aria-live="polite">
+          <button type="button" class="pr-indicator__current" id="pr-page-jump-btn" aria-label="페이지 번호를 입력해서 이동">1</button>
+          <input type="number" class="pr-indicator__input" id="pr-page-jump-input" inputmode="numeric" aria-label="이동할 페이지 번호" min="1">
+          <span class="pr-indicator__sep">/</span>
+          <span class="pr-indicator__total">1</span>
+        </div>
+
+        <button type="button" class="pr-btn pr-btn--next" id="pr-next" aria-label="다음 페이지">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+
+        <button type="button" class="pr-btn pr-btn--sm pr-btn--last" id="pr-last" aria-label="마지막 페이지로 이동">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="pr-theme-switcher" id="pr-theme-switcher" role="group" aria-label="화면 테마 선택">
+        <button type="button" class="pr-theme-btn" data-theme="light" aria-label="밝은 모드">
+          <span class="pr-theme-btn__swatch pr-theme-btn__swatch--light"></span>
+        </button>
+        <button type="button" class="pr-theme-btn" data-theme="dark" aria-label="다크 모드">
+          <span class="pr-theme-btn__swatch pr-theme-btn__swatch--dark"></span>
+        </button>
+      </div>
+    </div>
+
+    <p class="pr-hint" id="pr-hint">← 좌우로 넘겨보세요, 모서리를 드래그해도 돼요 →</p>
+
+  </div>
+
+  <script src="js/pdf-reader.js?v=204"></script>
+</body>
+
+</html>

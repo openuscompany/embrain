@@ -1,0 +1,835 @@
+:root {
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b7280;
+  --color-accent: #0066b3;
+  --color-accent-hover: #004d88;
+  --color-border: #e5e7eb;
+  --controls-height: 64px;
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+/* 다크 모드 — 책장(페이지 이미지)은 원래 흰 배경 그대로 두고, 주변 화면만 어둡게.
+   html에 걸어둬서 html 자신의 배경색도 같이 바뀌게 한다(자식인 body는 상속받음) —
+   그래야 모바일에서 화면 위/아래에 이전 테마 색(흰 배경 등) 줄이 안 비친다. */
+html[data-theme="dark"] {
+  --color-bg: #17181c;
+  --color-surface: #212227;
+  --color-text: #f1f1f2;
+  --color-text-muted: #9a9ba3;
+  --color-accent: #4da3ff;
+  --color-accent-hover: #7cbcff;
+  --color-border: #34353c;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Pretendard");
+}
+
+html, body {
+  height: 100%;
+  /* 모바일 브라우저는 주소창이 나타나 있을 때의 레이아웃 뷰포트 기준으로 100%를 계산해서,
+     실제 화면(주소창 뺀 나머지)보다 페이지가 더 길어져 하단 버튼이 화면 밖(주소창 뒤)으로
+     밀려 안 보이는 문제가 있다. 동적 뷰포트 단위(100dvh)를 지원하면 그걸 우선 쓴다. */
+  height: 100dvh;
+  /* 카카오톡 인앱 브라우저 등 100dvh를 지원하지 않는 환경을 위한 안전망. JS가
+     실제 window.innerHeight 기준으로 --vh를 계속 갱신해준다(pdf-reader.js 참고). */
+  height: calc(var(--vh, 1vh) * 100);
+  /* 삼성 인터넷처럼 고정 하단 탭바가 있는 브라우저는 window.innerHeight가 그 탭바
+     공간까지 포함해버려서, 계산한 높이가 실제 보이는 영역보다 커질 수 있다. 그러면
+     하단 버튼 줄이 화면 밖으로 밀리는데, overflow:hidden이면 스크롤도 안 돼서
+     아예 접근할 방법이 없어진다. auto로 바꿔서 최소한 살짝 스크롤은 되게 한다. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* vh 계산이 소수점 반올림 때문에 실제 화면보다 1px 정도 모자랄 때가 있는데, 그때
+     html 기본 배경(흰색)이 위/아래로 살짝 비쳐 보인다. body와 같은 색으로 맞춰서
+     그 틈이 보여도 티가 안 나게 한다. */
+  background: var(--color-bg);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.pr-wrapper {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 가로 모드일 때는 노치가 좌우에 걸쳐 있을 수 있어 좌우 안전 여백도 같이 챙긴다. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* 테마 전환 버튼 — 하단 컨트롤 바 오른쪽 끝에 배치 (예전엔 화면 좌상단에 떠 있었지만,
+   모바일에서 화면이 낮아지면 상단 목차 탭과 겹치는 문제가 있어 하단 바로 옮겼다) */
+
+.pr-theme-switcher {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--color-bg);
+}
+
+.pr-theme-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.pr-theme-btn.is-active {
+  border-color: var(--color-accent);
+}
+
+.pr-theme-btn__swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.pr-theme-btn__swatch--light {
+  background: #f7f8fa;
+}
+
+.pr-theme-btn__swatch--dark {
+  background: #17181c;
+}
+
+/* Stage */
+
+.pr-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* 가운데 정렬(align-items/justify-content: center)은 확대해서 내용이 커지면
+     위/왼쪽으로 넘치는 부분을 스크롤로 절대 못 보는 CSS의 고질적인 한계가 있다.
+     대신 시작 정렬(flex-start) + 책 쪽의 margin:auto 조합을 쓰면, 내용이 화면보다
+     작을 땐 auto margin이 남는 공간을 채우며 똑같이 가운데로 보이고, 커져서
+     넘치면 auto margin이 0이 되면서 자연스럽게 시작 위치 기준으로 바뀌어
+     스크롤로 전부 닿을 수 있다. */
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 16px;
+  background-color: var(--color-bg);
+  transition: background-color 0.2s ease;
+}
+
+/* 표지(단독 페이지)와 스프레드(두 페이지) 사이를 오갈 때 너비가 바뀐다.
+   canvas 시절엔 이 전환에 트랜지션을 걸어 부드럽게 보였지만, 지금은 안에 있는
+   .pv-page들이 이미 최종 폭으로 즉시 배치되는데 바깥 박스만 따로 애니메이션되면
+   그 사이 잘려 보이는 부분이 이전 페이지의 내용처럼 겹쳐 보이는 부작용이 있었다.
+   turnToPage 자체도 애니메이션 없이 즉시 전환하는 게 원래 의도였으므로, 너비는
+   트랜지션 없이 바로 바뀌게 한다(확대 배율 transform만 부드럽게 유지). */
+.pr-book-crop {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  margin: auto;
+  transition: transform 0.2s ease;
+  /* 확대(scale)가 기본값인 중심 기준으로 커지면 위/왼쪽으로도 넘쳐서, 그 방향은
+     스크롤해도 닿지 않는(음수 스크롤이 필요한) 영역이 되어버린다. 기준점을
+     왼쪽 위로 옮기면 오른쪽/아래로만 커지므로 평범한 스크롤로 전부 닿는다. */
+  transform-origin: top left;
+}
+
+/* 확대 상태에서는 책이 화면보다 커질 수 있어서, 스크롤로 나머지 부분을 볼 수 있게 한다.
+   정렬은 .pr-stage의 flex-start + 위 .pr-book-crop의 margin:auto 조합이 이미
+   "작을 땐 가운데, 커지면 시작 위치" 전환을 자동으로 처리해주므로 여기서 따로
+   손댈 필요가 없다. */
+.pr-stage.is-zoomed {
+  overflow: auto;
+}
+
+/* 확대 상태에서는 책 위에서 손가락/마우스로 끌어도 "페이지 넘기기" 제스처가
+   아니라 화면을 스크롤/패닝하는 동작이어야 한다. 하지만 St.PageFlip이 터치
+   이동을 항상 자기 것으로 가로채도록 설정되어 있어서(모바일에서 스와이프가
+   항상 페이지 넘김으로 인식되게 하려는 목적), 확대 중에 드래그하면 스크롤
+   대신 페이지가 넘어가려 하며 충돌해 스크롤이 안 되는 것처럼 느껴졌다.
+   확대 중에는 책(canvas)이 포인터 이벤트를 아예 안 받게 해서, 브라우저의
+   기본 스크롤/패닝이 방해받지 않고 그대로 동작하게 한다. */
+.pr-stage.is-zoomed .pr-book {
+  pointer-events: none;
+}
+
+.pr-book {
+  position: relative;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  /* 자식(.pv-flip)에게 실제 3D 공간감을 주기 위한 원근감. 값이 작을수록 더
+     극적으로(가까이서 보는 것처럼) 휘어 보인다. */
+  perspective: 1800px;
+}
+
+.pr-book.is-ready {
+  opacity: 1;
+}
+
+/* 정적인 좌/우 페이지 — canvas 없이 브라우저가 이미지를 직접 그리므로,
+   Canvas 2D의 drawImage보다 화질이 좋고 100%에서도 흐려지지 않는다. */
+.pv-page {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  background-color: #ffffff;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.pv-page--left {
+  box-shadow: inset -10px 0 20px -14px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.pv-page--right {
+  box-shadow: inset 10px 0 20px -14px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* 표지·모바일처럼 페이지 한 장만 보일 때는 좌/우를 나란히 두지 않고
+   왼쪽(단독) 자리에 꽉 채운다 — JS가 .pv-page--right를 display:none으로 숨긴다. */
+#pr-book {
+  display: flex;
+}
+
+/* 페이지를 넘기는 동안(드래그 중)에만 위에 잠깐 얹히는 canvas. 정적으로 볼
+   때는 이 요소가 아예 존재하지 않고 .pv-page의 background-image만 보이므로
+   화질과는 무관하다 — 손을 떼는 즉시 사라지고 원래의 선명한 이미지로
+   돌아간다. 종이 말림(곡선) 모양은 JS(drawFlipFrame)가 매 프레임 이 canvas에
+   직접 그린다. */
+.pv-flip-canvas {
+  position: absolute;
+  top: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 2px 0 16px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+
+.pr-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  transition: opacity 0.3s ease;
+}
+
+.pr-loading.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pr-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-accent);
+  animation: pr-spin 0.8s linear infinite;
+}
+
+@keyframes pr-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pr-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: #f3b4ac;
+  font-size: 0.875rem;
+}
+
+/* Controls */
+
+.pr-controls {
+  /* index.html이 viewport-fit=cover라 화면이 홈 인디케이터 아래까지 그려지는데,
+     그만큼 안전 여백(env(safe-area-inset-bottom))을 안 더해주면 아이폰 실기기에서
+     하단 버튼 줄이 홈 인디케이터에 가려 잘려 보인다. 높이에 그 여백만큼 더 얹어준다. */
+  flex: 0 0 calc(var(--controls-height) + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  /* 좌우 칸을 테마 버튼 폭(약 96px) 이상으로 똑같이 맞춰둬야, 오른쪽에만 있는
+     테마 버튼 때문에 가운데 페이지 넘김 버튼이 한쪽으로 쏠리지 않는다. */
+  grid-template-columns: minmax(96px, 1fr) auto minmax(96px, 1fr);
+  align-items: center;
+  padding: 0 16px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.pr-controls__nav {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .pr-controls {
+    /* 좁은 화면에서는 96px 최소폭 두 개 + 가운데 버튼들 폭을 합치면 화면보다 넓어져서
+       테마 버튼이 오른쪽 밖으로 잘려 나가는 문제가 있어, 최소폭을 줄인다. */
+    grid-template-columns: minmax(52px, 1fr) auto minmax(52px, 1fr);
+    padding: 0 10px;
+  }
+
+  .pr-controls__nav {
+    gap: 8px;
+  }
+
+  .pr-btn--sm {
+    width: 28px;
+    height: 28px;
+  }
+
+  .pr-btn--sm svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .pr-theme-switcher {
+    gap: 4px;
+    padding: 3px;
+  }
+
+  .pr-theme-btn {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.pr-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background 0.2s, opacity 0.2s, color 0.2s;
+}
+
+.pr-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.pr-btn:hover:not(:disabled) {
+  background: rgba(0, 102, 179, 0.1);
+  color: var(--color-accent);
+}
+
+/* 처음/끝으로 이동하는 버튼은 이전/다음 버튼보다 덜 자주 쓰여서, 크기를 조금
+   줄여 가운데 페이지 넘김 버튼들이 시각적으로 더 눈에 띄게 한다. */
+.pr-btn--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.pr-btn--sm svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pr-btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.pr-indicator {
+  min-width: 64px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  padding: 8px 10px;
+  transition: background 0.2s;
+}
+
+.pr-indicator:hover {
+  background: rgba(0, 102, 179, 0.08);
+}
+
+.pr-indicator__current {
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /* 숫자 하나만 딱 감싸면 클릭 영역이 너무 좁아서 손으로 누르기 어렵다.
+     여백을 넉넉히 줘서 실제로 누르기 쉬운 크기로 만든다. */
+  min-width: 1.6em;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  border-radius: 8px;
+  border-bottom: 1px dashed transparent;
+}
+
+.pr-indicator__current:hover {
+  background: rgba(0, 102, 179, 0.1);
+  border-bottom-color: var(--color-text-muted);
+}
+
+/* 클릭하면 숫자 대신 입력창이 나타나 원하는 페이지로 바로 이동할 수 있다 */
+.pr-indicator__input {
+  display: none;
+  width: 2.4em;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 1px 4px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.pr-indicator__input::-webkit-outer-spin-button,
+.pr-indicator__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pr-indicator.is-editing .pr-indicator__current {
+  display: none;
+}
+
+.pr-indicator.is-editing .pr-indicator__input {
+  display: inline-block;
+}
+
+/* Hint */
+
+.pr-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--controls-height) + 10px);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.pr-hint.is-hidden {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .pr-hint {
+    font-size: 0.6875rem;
+  }
+}
+
+/* 목차 (책 오른쪽 가장자리에 바로 붙여서 표시. 화면 가장자리가 아니라 책 자체를
+   기준으로 위치를 잡기 때문에(JS의 positionIndexRail), 책이 작아지거나 가운데에서
+   벗어나 있어도 항상 책에 붙어 따라다닌다. left는 JS가 매번 계산해서 넣어준다.) */
+
+.pr-index-rail {
+  position: absolute;
+  /* top은 JS(positionIndexRail)가 책의 실제 위쪽 가장자리에 맞춰 매번 계산해서
+     넣어준다 — 세로 가운데 정렬이 아니라 책 상단 기준으로 붙인다. */
+  top: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100% - 24px);
+  /* overflow-y:auto가 걸려 있으면 CSS 스펙상 overflow-x도 (visible로 놔둬도)
+     자동으로 auto 취급되어 버린다. 그래서 탭에 마우스를 올렸을 때 오른쪽으로
+     튀어나오는 translateX(4~6px)만큼이 이 컨테이너의 스크롤 경계에서 잘려
+     (가려져) 보였다. 오른쪽에 그 튀어나오는 폭만큼 미리 padding으로 공간을
+     확보해두면, 호버해도 이 요소 자신의 박스 범위를 벗어나지 않아 잘리지 않는다. */
+  padding: 4px 8px 4px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.pr-index-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.pr-index-tab {
+  position: relative;
+  flex: 0 0 auto;
+  width: 112px;
+  padding: 10px 12px;
+  border-radius: 0 12px 12px 0;
+  background: var(--tab-color, var(--color-accent));
+  color: var(--tab-text, #ffffff);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 3px 2px 10px rgba(17, 24, 39, 0.15);
+  opacity: 0.88;
+  transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pr-index-tab:hover,
+.pr-index-tab:focus-visible {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.pr-index-tab.is-active {
+  opacity: 1;
+  transform: translateX(6px);
+  box-shadow: 4px 3px 16px rgba(17, 24, 39, 0.3);
+}
+
+@media (max-width: 640px) {
+  .pr-index-rail {
+    gap: 6px;
+  }
+
+  .pr-index-tab {
+    width: 62px;
+    padding: 6px 7px;
+    font-size: 0.5625rem;
+    line-height: 1.25;
+    border-radius: 0 8px 8px 0;
+  }
+}
+
+/* 모바일에서는 화면이 좁아 책 오른쪽에 목차를 붙일 자리가 없어서, 대신 책
+   위쪽에 가로로 눕혀 붙인다(예전 작업물의 배치 방식). JS(positionIndexRail)가
+   window.screen.width 기준으로 이 클래스를 붙였다 뗐다 한다 — PC에서 브라우저
+   창을 아무리 좁혀도(또는 확대해도) 이 레이아웃으로 안 바뀌고, 실제 모바일
+   기기에서만 적용된다. 이 아래 규칙들은 위 PC용 규칙들보다 항상 우선해야 하므로
+   일부러 더 구체적인 선택자(.pr-index-rail--top .pr-index-tab)를 쓴다. */
+.pr-index-rail--top {
+  flex-direction: row;
+  /* flex-end로 각 탭을 자기 텍스트 줄 수만큼의 높이로 두면, 한 줄짜리 탭과
+     두 줄짜리 탭("'영점소비' 시대"처럼 줄바꿈되는 제목)의 높이가 달라 아래쪽
+     끝이 들쭉날쭉해 보인다. stretch로 바꾸면 다들 가장 큰(두 줄) 탭 높이에
+     맞춰 늘어나고, 아래 .pr-index-tab에서 내용은 세로 가운데로 정렬한다. */
+  align-items: stretch;
+  gap: 3px;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.pr-index-rail--top .pr-index-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 3px 6px;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.5625rem;
+  line-height: 1.2;
+  text-align: center;
+  /* 그림자(box-shadow)는 blur가 아무리 작아도 옆으로 번지는 범위가 있어서,
+     탭 사이 간격(3px)이 좁은 이 레이아웃에서는 항상 옆 탭 위로 살짝 겹쳐
+     보였다. 아예 그림자를 빼고 opacity/translateY 차이만으로 기본 탭과
+     선택된 탭을 구분해서, 어떤 경우에도 옆 탭을 침범하지 않는다.
+     기본 상태는 위로 떠 있고, 선택하면 책 쪽으로 눌려 붙는 모양이다. */
+  opacity: 0.7;
+  transform: translateY(0);
+}
+
+.pr-index-rail--top .pr-index-tab:hover,
+.pr-index-rail--top .pr-index-tab:focus-visible {
+  opacity: 0.88;
+  transform: translateY(2px);
+}
+
+.pr-index-rail--top .pr-index-tab.is-active {
+  opacity: 1;
+  transform: translateY(4px);
+}
+
+/* 도구 모음 (좌상단 플로팅) — 확대/축소, 책갈피, 메모 */
+
+.pr-toolbar {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.pr-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 0.15s ease;
+}
+
+.pr-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.pr-toolbar-btn.is-active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.pr-toolbar-zoom-level {
+  min-width: 38px;
+  text-align: center;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0 2px;
+}
+
+/* 책갈피 패널 / 메모 패널 — 둘 다 좌상단 도구 모음 바로 아래 뜨는 작은 팝업 */
+
+.pr-bookmark-panel,
+.pr-memo-panel {
+  position: fixed;
+  top: 60px;
+  left: 16px;
+  z-index: 20;
+  width: 240px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.22);
+  padding: 10px;
+}
+
+.pr-bookmark-panel[hidden],
+.pr-memo-panel[hidden] {
+  display: none;
+}
+
+/* 책갈피 추가/삭제 버튼 · 메모 목록 소제목 — 두 패널에서 공통으로 쓰는 스타일 */
+.pr-panel-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.pr-panel-toggle:hover {
+  background: rgba(0, 102, 179, 0.1);
+}
+
+.pr-panel-toggle.is-active {
+  color: #e0568f;
+  border-color: #e0568f;
+}
+
+.pr-panel-subhead {
+  margin: 10px 0 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.pr-panel-subhead[hidden] {
+  display: none;
+}
+
+.pr-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pr-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border-radius: 8px;
+  background: var(--color-bg);
+  transition: background-color 0.15s ease;
+}
+
+.pr-panel-item:hover {
+  background: rgba(0, 102, 179, 0.1);
+}
+
+.pr-panel-item__jump {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.pr-panel-item__page {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e0568f;
+}
+
+.pr-panel-item__snippet {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-panel-item__delete {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pr-panel-item__delete:hover {
+  background: rgba(224, 86, 143, 0.15);
+  color: #e0568f;
+}
+
+.pr-panel-empty {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.pr-memo-textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.pr-memo-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.pr-memo-close {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  padding: 4px 8px;
+}
+
+.pr-memo-close:hover {
+  color: var(--color-accent-hover);
+}
+
+/* 책갈피 리본 — 실제로 페이지 사이에 꽂아둔 것처럼, 책갈피한 페이지에서만 보인다 */
+
+.pr-bookmark-ribbon {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  width: 24px;
+  height: 56px;
+  background: #e0568f;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  z-index: 12;
+  pointer-events: none;
+}
+
+.pr-bookmark-ribbon[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .pr-bookmark-ribbon {
+    width: 18px;
+    height: 42px;
+    right: 12px;
+  }
+}
+
+/* 우클릭/드래그/선택 방지 */
+
+.pdf-reader,
+.pdf-reader * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
