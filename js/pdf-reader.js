@@ -165,7 +165,16 @@
   }
 
   // --- 확대/축소 ---
-  var zoomLevel = 1;
+  // PC에서 100%(줌 없음)일 때는 화면 크기 제약상 페이지가 물리적으로 너무
+  // 작게 표시돼서, 일반(레티나 아닌) 모니터에서는 어떤 렌더링 방식을 쓰든
+  // 글자가 흐려 보인다는 게 여러 사람 테스트로 확인됐다 — canvas를 걷어내고
+  // background-image로 바꿔도 마찬가지였다. 반대로 150%~200%는 항상
+  // 선명하다고 확인됐으므로, PC에서는 시작 배율 자체를 125%로 높여서
+  // 기본적으로 더 큰 물리적 크기로 보여준다. 모바일은 화면 자체의 화소
+  // 밀도(DPR)가 높아 100%에서도 이미 선명한 경우가 대부분이고, 오히려
+  // 125%로 시작하면 화면보다 커져서 가로 스크롤이 필요해지는 게 더 불편하므로
+  // 그대로 100%를 유지한다. 사용자가 원하면 "−"/"+" 버튼으로 직접 조절 가능.
+  var zoomLevel = isMobileLayout() ? 1 : 1.25;
   var ZOOM_MIN = 1;
   var ZOOM_MAX = 2;
   var ZOOM_STEP = 0.25;
@@ -235,6 +244,10 @@
       scheduleZoomAnchorFallback();
     });
   }
+  // 버튼을 누르기 전, 처음 화면에 뜰 때부터 기본 배율(zoomLevel)이 실제로
+  // 적용돼 있어야 한다 — 이 호출이 빠져 있으면 zoomLevel 값과 무관하게
+  // 화면에는 항상 scale 없는(=100%) 크기로 보인다.
+  applyZoom();
 
   if (bookCropEl) {
     bookCropEl.addEventListener('transitionend', function (event) {
@@ -615,10 +628,42 @@
       this.resize();
       updateIndicator(this.currentIndex, pageCount);
       positionIndexRail();
+      this.prefetchAround();
     },
 
     getCurrentPageIndex: function () {
       return this.currentIndex;
+    },
+
+    // 지금 페이지는 이미 떠 있으니, 앞으로 넘길 가능성이 높은 뒤쪽 몇 장(및
+    // 되돌아갈 수 있는 앞쪽 한두 장)을 백그라운드에서 미리 내려받아 둔다.
+    // 처음 로딩은 지금 보이는 한 장만 받아서 빠르게 뜨고, 대신 실제로 안
+    // 본 페이지로 넘길 때마다 매번 새로 받느라 멈칫하는 걸 줄이기 위함이다.
+    // 브라우저 자체 캐시에 걸리도록 Image 객체만 만들어 src를 지정해두는
+    // 흔한 방식이고, 같은 URL을 두 번 만들지 않게 한 번 요청한 것만 기록한다.
+    _prefetched: {},
+    prefetchAround: function () {
+      var self = this;
+      var idx = this.currentIndex;
+      var ahead = [];
+      for (var i = 1; i <= 6; i++) ahead.push(idx + i);
+      for (var j = 1; j <= 2; j++) ahead.push(idx - j);
+      var run = function () {
+        ahead.forEach(function (n) {
+          if (n < 0 || n >= pageCount) return;
+          if (self._prefetched[n]) return;
+          self._prefetched[n] = true;
+          var img = new Image();
+          img.src = pageImages[n];
+        });
+      };
+      // requestIdleCallback이 있으면 그걸로 미뤄서, 지금 화면에 보이는
+      // 이미지 로딩과 대역폭을 다투지 않게 한다.
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(run, { timeout: 800 });
+      } else {
+        setTimeout(run, 80);
+      }
     },
 
     // 애니메이션 없이 바로 전환 (버튼/목차/책갈피/페이지 점프에서 사용)
