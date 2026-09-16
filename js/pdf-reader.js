@@ -103,11 +103,14 @@
   // 책 한 페이지의 화면 표시 크기(px)를 계산한다. St.PageFlip을 쓸 때는 라이브러리가
   // 자체적으로 스프레드/포트레이트 여부를 판단하느라 minWidth/maxWidth 같은 힌트가
   // 필요했는데, 이제는 우리가 직접 DOM 크기를 정하므로 훨씬 단순해졌다.
-  function sizeBookToStage(aspect) {
+  function sizeBookToStage(aspect, zoom) {
+    zoom = zoom || 1;
     var stageRect = stage.getBoundingClientRect();
     var mobileLayout = isMobileLayout();
     // 목차가 PC에서는 책 오른쪽 가장자리에, 모바일에서는 책 위쪽에 붙어서 따라다니므로,
     // 책 크기를 계산할 때 그만큼 미리 비워둬서 화면 밖으로 넘치거나 겹치지 않게 한다.
+    // 이 여백 계산은 화면(뷰포트)에 맞춰 "안 잘리게" 배치하기 위한 것이라, 확대
+    // 배율과 무관하게 항상 확대 전(100%) 기준으로 한다.
     var railWidth = (!mobileLayout && indexRail && indexRail.offsetWidth) || 0;
     var railHeight = (mobileLayout && indexRail && indexRail.offsetHeight) || 0;
     stage.style.paddingRight = mobileLayout ? '16px' : (16 + railWidth + 6) + 'px';
@@ -122,6 +125,15 @@
       pageW = Math.min(availW, availH * aspect);
     }
     var pageH = pageW / aspect;
+
+    // 확대는 여기서 적용한다 — CSS transform:scale로 "다 그려진 뒤에" 늘리면,
+    // 브라우저가 원본 이미지를 일단 이 작은(확대 전) 크기로 축소해서 그린 뒤
+    // 그 결과물을 다시 확대하는 꼴이 되어 축소 단계에서 이미 손실된 디테일이
+    // 그대로 뭉개져 커지기만 한다. 대신 박스 자체의 크기를 배율만큼 키워두면,
+    // 브라우저가 원본에서 곧바로 이 최종 크기로 한 번에 축소해서 그리므로
+    // 배율이 얼마든(100%든 125%든) 그 크기에서 가능한 최선의 화질이 나온다.
+    pageW *= zoom;
+    pageH *= zoom;
 
     // Windows 디스플레이 배율이 125%/150%처럼 정수가 아니면, 책 크기가 CSS 픽셀
     // 기준으로는 딱 맞아떨어져도 실제 모니터의 물리 픽셀 격자에는 어긋나서 화면에
@@ -165,16 +177,13 @@
   }
 
   // --- 확대/축소 ---
-  // PC에서 100%(줌 없음)일 때는 화면 크기 제약상 페이지가 물리적으로 너무
-  // 작게 표시돼서, 일반(레티나 아닌) 모니터에서는 어떤 렌더링 방식을 쓰든
-  // 글자가 흐려 보인다는 게 여러 사람 테스트로 확인됐다 — canvas를 걷어내고
-  // background-image로 바꿔도 마찬가지였다. 반대로 150%~200%는 항상
-  // 선명하다고 확인됐으므로, PC에서는 시작 배율 자체를 125%로 높여서
-  // 기본적으로 더 큰 물리적 크기로 보여준다. 모바일은 화면 자체의 화소
-  // 밀도(DPR)가 높아 100%에서도 이미 선명한 경우가 대부분이고, 오히려
-  // 125%로 시작하면 화면보다 커져서 가로 스크롤이 필요해지는 게 더 불편하므로
-  // 그대로 100%를 유지한다. 사용자가 원하면 "−"/"+" 버튼으로 직접 조절 가능.
-  var zoomLevel = isMobileLayout() ? 1 : 1.25;
+  // 예전엔 박스 크기는 작게 계산해두고 CSS transform:scale로 "나중에" 키우는
+  // 방식이라, 브라우저가 원본을 일단 그 작은 크기로 축소해서 그린 뒤 그
+  // 결과물을 다시 확대하는 꼴이 되어 100%에서도 불필요하게 흐려 보였다.
+  // 지금은 sizeBookToStage가 zoomLevel을 반영해서 박스 자체를 그 배율만큼
+  // 키운 뒤 브라우저가 원본에서 곧바로 그 크기로 축소하므로, 100%도 그 크기에서
+  // 낼 수 있는 최선의 화질이 나온다. 그래서 기본값은 다시 100%로 둔다.
+  var zoomLevel = 1;
   var ZOOM_MIN = 1;
   var ZOOM_MAX = 2;
   var ZOOM_STEP = 0.25;
@@ -211,7 +220,11 @@
   }
 
   function applyZoom() {
-    if (bookCropEl) bookCropEl.style.transform = 'scale(' + zoomLevel + ')';
+    // CSS transform:scale로 "다 그린 뒤에" 확대하지 않는다 — sizeBookToStage가
+    // zoomLevel을 반영해서 박스 자체를 키우므로, book.resize()를 다시 부르면
+    // 브라우저가 원본 이미지에서 곧바로 그 최종 크기로 축소해서 그린다
+    // (자세한 이유는 sizeBookToStage 안의 주석 참고).
+    if (typeof book !== 'undefined' && book.resize) book.resize();
     if (zoomLevelEl) zoomLevelEl.textContent = Math.round(zoomLevel * 100) + '%';
     if (stage) stage.classList.toggle('is-zoomed', zoomLevel > 1);
     positionIndexRail();
@@ -592,7 +605,7 @@
 
     // 화면 크기가 바뀔 때(리사이즈, 확대) 페이지 박스 크기를 다시 계산해서 반영한다.
     resize: function () {
-      this.dims = sizeBookToStage(pageAspect);
+      this.dims = sizeBookToStage(pageAspect, zoomLevel);
       var mobile = isMobileLayout();
       var showingSingle = mobile || this.isCoverIndex(this.currentIndex);
       var totalWidth = showingSingle ? this.dims.width : this.dims.width * 2;
